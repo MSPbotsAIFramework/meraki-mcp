@@ -35,7 +35,7 @@ A request to `/mcp` without the key gets HTTP 401; a malformed organization id g
 
 ## Tools
 
-All tools return a JSON string. Paged lists take `per_page` (max 1000) and `starting_after`, and
+All tools return a JSON string. Paged lists take `per_page` (default 50, max 200; larger values are capped) and `starting_after`, and
 return `{count, has_more, next_cursor}`; pass `next_cursor` back as `starting_after`.
 
 | Area | Tools |

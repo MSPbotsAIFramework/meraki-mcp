@@ -289,3 +289,10 @@ def test_base_url_env(monkeypatch, value, expected):
             create_mcp_server()
     else:
         assert api_base_url() == expected
+
+
+@pytest.mark.parametrize("per_page,sent", [(None, "50"), (120, "120"), (1000, "200")])
+async def test_page_size_default_and_cap(monkeypatch, per_page, sent):
+    rec = Recorder({"organizations/1/networks": []})
+    await _call(monkeypatch, rec, "meraki_networks_list", {"organization_id": "1"} | ({"per_page": per_page} if per_page else {}))
+    assert rec.requests[0].url.params["perPage"] == sent

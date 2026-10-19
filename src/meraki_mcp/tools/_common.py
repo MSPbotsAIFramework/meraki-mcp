@@ -23,7 +23,7 @@ from pydantic import Field
 
 from .._json import dump_json_capped, error_envelope
 from ..api_client import MerakiClient, MerakiError, Page
-from ..config import MAX_PAGE_SIZE, read_only_mode
+from ..config import ACCEPTED_PAGE_SIZE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, read_only_mode
 
 logger = logging.getLogger("meraki_mcp.tools")
 
@@ -38,11 +38,18 @@ NOT_CONFIGURED = error_envelope("not_configured", "Meraki credentials are missin
 OrganizationId = Annotated[str, Field(description="Meraki organization id (meraki_organizations_list).", min_length=1)]
 NetworkId = Annotated[str, Field(description="Meraki network id, e.g. L_123... or N_123...", min_length=1)]
 Serial = Annotated[str, Field(description="Device serial, e.g. Q2XX-XXXX-XXXX.", min_length=1)]
-PerPage = Annotated[int | None, Field(description=f"Records per page (max {MAX_PAGE_SIZE}).", ge=1, le=MAX_PAGE_SIZE)]
+PerPage = Annotated[
+    int | None,
+    Field(description=f"Records per page (default {DEFAULT_PAGE_SIZE}, max {MAX_PAGE_SIZE}; larger values are capped).", ge=1, le=ACCEPTED_PAGE_SIZE),
+]
 StartingAfter = Annotated[str | None, Field(description="next_cursor from the previous page.")]
 ConfirmDestructive = Annotated[
     bool | None, Field(description="Must be true, set only after the user approved this exact change.")
 ]
+
+
+def page_size(per_page: int | None) -> int:
+    return min(per_page or DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
 
 
 def compact(values: dict[str, Any]) -> dict[str, Any]:

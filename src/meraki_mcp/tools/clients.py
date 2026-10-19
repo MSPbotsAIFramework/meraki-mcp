@@ -19,7 +19,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
 from ..api_client import MerakiClient
-from ._common import DESTRUCTIVE, READ_ONLY, ClientFactory, ConfirmDestructive, NetworkId, PerPage, StartingAfter, compact, listing, run_tool, write_guard
+from ._common import DESTRUCTIVE, READ_ONLY, ClientFactory, ConfirmDestructive, NetworkId, PerPage, StartingAfter, compact, listing, page_size, run_tool, write_guard
 
 ClientId = Annotated[str, Field(description="Client id or MAC address.", min_length=1)]
 
@@ -35,7 +35,7 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
         """List clients seen on a network: description, MAC, IP, user, OS, VLAN, SSID / switchport, usage."""
 
         async def action(client: MerakiClient) -> dict:
-            params = compact({"timespan": timespan, "perPage": per_page, "startingAfter": starting_after})
+            params = compact({"timespan": timespan, "perPage": page_size(per_page), "startingAfter": starting_after})
             return listing(await client.get_page(f"networks/{network_id}/clients", params), "clients")
 
         return await run_tool("meraki_clients_list", client_factory, action)

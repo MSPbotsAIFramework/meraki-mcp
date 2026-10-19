@@ -30,6 +30,7 @@ from ._common import (
     StartingAfter,
     compact,
     listing,
+    page_size,
     run_tool,
     write_guard,
 )
@@ -41,7 +42,7 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
         """List an organization's networks: id, name, product types, time zone, tags."""
 
         async def action(client: MerakiClient) -> dict:
-            params = compact({"perPage": per_page, "startingAfter": starting_after})
+            params = compact({"perPage": page_size(per_page), "startingAfter": starting_after})
             return listing(await client.get_page(f"organizations/{organization_id}/networks", params), "networks")
 
         return await run_tool("meraki_networks_list", client_factory, action)

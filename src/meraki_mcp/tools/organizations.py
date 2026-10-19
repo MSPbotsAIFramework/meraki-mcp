@@ -18,7 +18,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from ..api_client import MerakiClient
-from ._common import READ_ONLY, ClientFactory, OrganizationId, PerPage, StartingAfter, compact, listing, run_tool
+from ._common import READ_ONLY, ClientFactory, OrganizationId, PerPage, StartingAfter, compact, listing, page_size, run_tool
 
 
 def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
@@ -47,7 +47,7 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
         """List all devices claimed in an organization (used or not): serial, model, MAC, network, order."""
 
         async def action(client: MerakiClient) -> dict:
-            params = compact({"perPage": per_page, "startingAfter": starting_after})
+            params = compact({"perPage": page_size(per_page), "startingAfter": starting_after})
             return listing(await client.get_page(f"organizations/{organization_id}/inventory/devices", params), "devices")
 
         return await run_tool("meraki_organizations_inventory_list", client_factory, action)

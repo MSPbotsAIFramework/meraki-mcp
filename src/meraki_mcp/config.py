@@ -20,7 +20,10 @@ from urllib.parse import urlparse
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 API_BASE_URL = "https://api.meraki.com/api/v1"
-MAX_PAGE_SIZE = 1000
+MAX_PAGE_SIZE = 200
+DEFAULT_PAGE_SIZE = 50
+# Earlier versions accepted up to 1000 per page; such values are still accepted and capped at MAX_PAGE_SIZE.
+ACCEPTED_PAGE_SIZE = 1000
 
 # Meraki dashboard hosts: the global cloud (meraki.com) and the China, Canada and India clouds.
 MERAKI_HOST = re.compile(r"^(?:[a-z0-9-]+\.)*meraki\.(?:com|cn|ca|in)$")

@@ -108,7 +108,7 @@ def test_enums(tools):
     assert tools["meraki_raw_request"].inputSchema["properties"]["method"]["enum"] == ["GET", "POST", "PUT", "DELETE"]
     number = tools["meraki_wireless_ssids_update"].inputSchema["properties"]["number"]
     assert (number["minimum"], number["maximum"]) == (0, 14)
-    assert tools["meraki_networks_list"].inputSchema["properties"]["per_page"]["anyOf"][0]["maximum"] == 1000
+    assert tools["meraki_networks_list"].inputSchema["properties"]["per_page"]["anyOf"][0]["maximum"] == 1000  # still accepted, capped at 200
 
 
 def test_navigate_lists_every_tool():
