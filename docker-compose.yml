@@ -1,0 +1,21 @@
+# Local debugging only. Credentials are never configured here: send the
+# X-Meraki-Api-Key (and optional X-Meraki-Org-Id) headers on each request, as the gateway does.
+services:
+  meraki-mcp:
+    build:
+      context: .
+      target: production
+    image: meraki-mcp:dev
+    ports:
+      - "8080:8080"
+    environment:
+      - MCP_HTTP_PORT=8080
+      - MCP_HTTP_HOST=0.0.0.0
+      - LOG_LEVEL=INFO
+      - READ_ONLY_MODE=true
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

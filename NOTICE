@@ -1,0 +1,8 @@
+Cisco Meraki MCP Server
+Copyright 2026 MSPbots.ai
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+"Cisco" and "Meraki" are trademarks of Cisco Systems, Inc. This project is an
+independent integration that calls the documented Meraki Dashboard API; it
+contains no Cisco source code and is not affiliated with or endorsed by Cisco.
