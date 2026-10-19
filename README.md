@@ -61,7 +61,7 @@ Errors come back as a JSON envelope instead of an exception:
 ```
 
 `code` is one of `not_configured`, `unauthorized`, `not_found`, `invalid_argument`,
-`rate_limited`, `upstream_error`, `read_only_mode`. Reads are retried with backoff on 429, 5xx
+`rate_limited`, `upstream_error`; a change refused in read-only mode returns `not_configured`. Reads are retried with backoff on 429, 5xx
 and network errors; changes only on 429, so a change never runs twice. Meraki allows about 10
 calls per second per organization.
 

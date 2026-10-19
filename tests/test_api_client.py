@@ -203,7 +203,8 @@ WRITES = [
 async def test_writes_refused_in_read_only_mode(monkeypatch, tool, args, method, path, body):
     rec = Recorder()
     out = await _call(monkeypatch, rec, tool, args | {"confirm_destructive_action": True})
-    assert out["error"]["code"] == "read_only_mode"
+    assert out["error"]["code"] == "not_configured"
+    assert "READ_ONLY_MODE=false" in out["error"]["message"]
     assert rec.requests == []
 
 

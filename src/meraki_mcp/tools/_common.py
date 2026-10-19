@@ -53,7 +53,7 @@ def write_guard(confirm: bool | None, action: str) -> str | dict | None:
     """None when the write may run; otherwise the refusal to return."""
     if read_only_mode():
         return error_envelope(
-            "read_only_mode",
+            "not_configured",
             "This server runs in read-only mode, so changes are disabled. An operator can set READ_ONLY_MODE=false to allow them.",
             False,
         )
