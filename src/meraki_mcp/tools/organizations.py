@@ -18,16 +18,40 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from ..api_client import MerakiClient
-from ._common import READ_ONLY, ClientFactory, OrganizationId, PerPage, StartingAfter, compact, listing, page_size, run_tool
+from ._common import (
+    READ_ONLY,
+    ClientFactory,
+    Limit,
+    Offset,
+    OrganizationId,
+    PerPage,
+    StartingAfter,
+    compact,
+    listing,
+    local_page,
+    page_size,
+    run_tool,
+)
 
 
 def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
     @mcp.tool(annotations=READ_ONLY)
-    async def meraki_organizations_list() -> str:
-        """List the organizations the API key can access: id, name, dashboard URL, licensing model."""
+    async def meraki_organizations_list(
+        offset: Offset = None, limit: Limit = None, starting_after: StartingAfter = None
+    ) -> str:
+        """List the organizations the API key can access: id, name, dashboard URL, licensing model.
+
+        Reads up to 1,000 at once: continue with offset=next_offset, then starting_after=next_cursor.
+        """
 
         async def action(client: MerakiClient) -> dict:
-            return listing(await client.get_page("organizations", {"perPage": 1000}), "organizations")
+            page = await client.get_page("organizations", compact({"perPage": 1000, "startingAfter": starting_after}))
+            rows = page.data if isinstance(page.data, list) else []
+            result = local_page(rows, "organizations", offset, limit)
+            if not result["has_more"] and page.next_cursor:
+                # This Meraki page is done; the next one starts at next_cursor (offset 0 there).
+                result |= {"has_more": True, "next_cursor": page.next_cursor}
+            return result
 
         return await run_tool("meraki_organizations_list", client_factory, action)
 

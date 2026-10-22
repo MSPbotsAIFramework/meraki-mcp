@@ -228,6 +228,21 @@ def _retry_delay(resp: httpx.Response | None, attempt: int) -> float:
 
 
 def _error_message(resp: httpx.Response, path: str) -> str:
+    message = _raw_error_message(resp, path)
+    org = _ORG_PATH.match(path.split("?")[0])
+    if resp.status_code == 404 and org:
+        # Meraki answers 404, not 403, when an organization has API access disabled or the key cannot see it.
+        message += (
+            f". Organization {org.group(1)} may have API access disabled, or this API key has no access to it "
+            "(Meraki answers 404 in both cases)."
+        )
+    return message
+
+
+_ORG_PATH = re.compile(r"^/?organizations/([^/]+)")
+
+
+def _raw_error_message(resp: httpx.Response, path: str) -> str:
     fallback = f"Meraki returned HTTP {resp.status_code} for {path.split('?')[0]}"
     try:
         payload = resp.json()

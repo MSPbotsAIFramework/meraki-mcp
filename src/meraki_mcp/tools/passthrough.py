@@ -13,12 +13,15 @@
 # limitations under the License.
 """Any other Dashboard API call, with the same read-only and confirmation rules."""
 
+import json
 import re
 from typing import Annotated, Any, Literal
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
+from .._json import compact as compact_json
+from .._json import dump_json_capped
 from ..api_client import MerakiClient
 from ._common import DESTRUCTIVE, ClientFactory, ConfirmDestructive, run_tool, write_guard
 
@@ -50,6 +53,18 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
                 if refused is not None:
                     return refused
             page = await client.request(method, clean, params=query, body=body)
-            return {"data": page.data, "next_cursor": page.next_cursor} if page.next_cursor else page.data
+            result = {"data": page.data, "next_cursor": page.next_cursor} if page.next_cursor else page.data
+            if method != "GET":
+                return result
+            payload = json.loads(dump_json_capped(result))
+            if isinstance(payload, dict) and payload.get("truncated") and "original_count" in payload:
+                # This tool has no page size: say how to continue with Meraki's own paging parameters.
+                fit = payload.pop("retry_page_size", payload.get("count") or 1)
+                payload["note"] = (
+                    f"Only {fit} of {payload['original_count']} items fit the response size limit. To read the rest, "
+                    f"call again with query perPage={fit} (and the same startingAfter, if any), then follow "
+                    "next_cursor as query startingAfter. Endpoints without perPage return everything at once."
+                )
+            return compact_json(payload)
 
         return await run_tool("meraki_raw_request", client_factory, action)

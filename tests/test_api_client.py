@@ -296,3 +296,124 @@ async def test_page_size_default_and_cap(monkeypatch, per_page, sent):
     rec = Recorder({"organizations/1/networks": []})
     await _call(monkeypatch, rec, "meraki_networks_list", {"organization_id": "1"} | ({"per_page": per_page} if per_page else {}))
     assert rec.requests[0].url.params["perPage"] == sent
+
+
+
+# ---- PRD-21073: whole-list tools continue by offset ----------------------------------------------------
+# Checklist: a 54-port switch walked by next_offset returns every port once (cut along the way); offset
+# inside the list; offset past the end; no offset returns the same records as before; limit; no retry hint
+# for a page size these tools do not have.
+
+SERIAL = "Q2JW-4JKM-J65L"
+NET = "L_828099381482759220"
+
+
+def _ports(n=54):
+    return [{"portId": str(i), "name": f"Port {i}", "enabled": True, "type": "trunk", "vlan": 1,
+             "allowedVlans": "all", **{f"setting{k}": f"value {k}" for k in range(30)}} for i in range(1, n + 1)]
+
+
+WHOLE_LIST_TOOLS = [
+    ("meraki_switch_ports_list", f"devices/{SERIAL}/switch/ports", "ports", {"serial": SERIAL}, "portId"),
+    ("meraki_switch_port_statuses_list", f"devices/{SERIAL}/switch/ports/statuses", "ports", {"serial": SERIAL, "timespan": 3600}, "portId"),
+    ("meraki_devices_list", f"networks/{NET}/devices", "devices", {"network_id": NET}, "portId"),
+    ("meraki_wireless_rf_profiles_list", f"networks/{NET}/wireless/rfProfiles", "rf_profiles", {"network_id": NET}, "portId"),
+    ("meraki_wireless_ssids_list", f"networks/{NET}/wireless/ssids", "ssids", {"network_id": NET}, "portId"),
+    ("meraki_organizations_list", "organizations", "organizations", {}, "portId"),
+]
+
+
+@pytest.mark.parametrize("tool,path,key,args,idf", WHOLE_LIST_TOOLS)
+async def test_cut_whole_lists_continue_by_next_offset(monkeypatch, tool, path, key, args, idf):
+    rows = _ports(54)
+    rec = Recorder({path: rows})
+    ids, cut, call_args, calls = [], 0, dict(args), 0
+    while True:
+        out = await _call(monkeypatch, rec, tool, call_args)
+        calls += 1
+        assert "retry_page_size" not in out, out.get("note")
+        cut += bool(out.get("truncated"))
+        ids += [r[idf] for r in out[key]]
+        if out.get("next_offset") is None:
+            break
+        call_args = args | {"offset": out["next_offset"]}
+        assert calls < 60
+    assert cut > 0  # 54 wide ports do not fit one response
+    assert ids == [r[idf] for r in rows]  # all 54, no gaps, no duplicates
+
+
+@pytest.mark.parametrize("tool,path,key,args,idf", WHOLE_LIST_TOOLS)
+async def test_offset_limit_and_past_the_end(monkeypatch, tool, path, key, args, idf):
+    rows = [{"portId": str(i)} for i in range(1, 55)]
+    rec = Recorder({path: rows})
+    middle = await _call(monkeypatch, rec, tool, args | {"offset": 20, "limit": 5})
+    assert [r[idf] for r in middle[key]] == ["21", "22", "23", "24", "25"]
+    assert (middle["offset"], middle["next_offset"], middle["total"], middle["has_more"]) == (20, 25, 54, True)
+    past = await _call(monkeypatch, rec, tool, args | {"offset": 100})
+    assert (past[key], past["has_more"], past.get("next_offset")) == ([], False, None)
+    whole = await _call(monkeypatch, rec, tool, args)
+    assert [r[idf] for r in whole[key]] == [r["portId"] for r in rows] and whole["count"] == 54
+
+
+async def test_switch_ports_keep_their_fields(monkeypatch):
+    rec = Recorder({f"devices/{SERIAL}/switch/ports": [{"portId": "1"}]})
+    out = await _call(monkeypatch, rec, "meraki_switch_ports_list", {"serial": SERIAL})
+    assert (out["serial"], out["count"], out["ports"]) == (SERIAL, 1, [{"portId": "1"}])
+
+
+async def test_ssid_keys_stay_hidden_when_paged(monkeypatch):
+    rec = Recorder({f"networks/{NET}/wireless/ssids": [{"number": 0, "psk": "secret"}, {"number": 1, "psk": "x"}]})
+    out = await _call(monkeypatch, rec, "meraki_wireless_ssids_list", {"network_id": NET, "offset": 1})
+    assert out["ssids"] == [{"number": 1, "psk": "********"}]
+
+
+async def test_organizations_continue_to_the_next_meraki_page(monkeypatch):
+    link = '<https://api.meraki.com/api/v1/organizations?perPage=1000&startingAfter=O_2>; rel=next'
+
+    def reply(request):
+        if request.url.params.get("startingAfter") == "O_2":
+            return httpx.Response(200, json=[{"id": "O_3"}])
+        return httpx.Response(200, json=[{"id": "O_1"}, {"id": "O_2"}], headers={"Link": link})
+
+    rec = Recorder({"organizations": reply})
+    first = await _call(monkeypatch, rec, "meraki_organizations_list", {"limit": 1})
+    assert ([o["id"] for o in first["organizations"]], first["next_offset"]) == (["O_1"], 1) and "next_cursor" not in first
+    end_of_page = await _call(monkeypatch, rec, "meraki_organizations_list", {"offset": 1})
+    assert [o["id"] for o in end_of_page["organizations"]] == ["O_2"]
+    assert end_of_page["has_more"] is True and end_of_page["next_cursor"] == "O_2" and "next_offset" not in end_of_page
+    second = await _call(monkeypatch, rec, "meraki_organizations_list", {"starting_after": "O_2"})
+    assert [o["id"] for o in second["organizations"]] == ["O_3"] and second["has_more"] is False
+
+
+# ---- PRD-21074: 404 on an organization, raw GET truncation -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "path,explained",
+    [("organizations/1667841/networks", True), ("organizations/1667841", True), ("networks/L_1/devices", False)],
+)
+async def test_404_on_an_organization_explains_the_likely_cause(monkeypatch, path, explained):
+    rec = Recorder({path: lambda r: httpx.Response(404, json={"errors": ["Not found"]})})
+    tool, args = {
+        "organizations/1667841/networks": ("meraki_networks_list", {"organization_id": "1667841"}),
+        "organizations/1667841": ("meraki_organizations_get", {"organization_id": "1667841"}),
+        "networks/L_1/devices": ("meraki_devices_list", {"network_id": "L_1"}),
+    }[path]
+    out = await _call(monkeypatch, rec, tool, args)
+    assert out["error"]["code"] == "not_found"
+    assert ("API access disabled" in out["error"]["message"]) is explained
+
+
+async def test_cut_raw_get_says_how_to_continue(monkeypatch):
+    rows = [{"serial": f"S{i:03d}", **{f"f{k}": f"value {k}" for k in range(30)}} for i in range(196)]
+    rec = Recorder({"organizations/1209397/devices/statuses": rows})
+    out = await _call(monkeypatch, rec, "meraki_raw_request", {"method": "GET", "path": "/organizations/1209397/devices/statuses"})
+    assert out["truncated"] is True and "retry_page_size" not in out
+    assert 0 < len(out["items"]) < 196 and out["original_count"] == 196
+    assert f"perPage={len(out['items'])}" in out["note"] and "startingAfter" in out["note"]
+
+
+async def test_small_raw_get_is_unchanged(monkeypatch):
+    rec = Recorder({"organizations/1/networks": [{"id": "L_1"}]})
+    out = await _call(monkeypatch, rec, "meraki_raw_request", {"method": "GET", "path": "/organizations/1/networks"})
+    assert out == [{"id": "L_1"}]

@@ -43,6 +43,10 @@ PerPage = Annotated[
     Field(description=f"Records per page (default {DEFAULT_PAGE_SIZE}, max {MAX_PAGE_SIZE}; larger values are capped).", ge=1, le=ACCEPTED_PAGE_SIZE),
 ]
 StartingAfter = Annotated[str | None, Field(description="next_cursor from the previous page.")]
+Offset = Annotated[
+    int | None, Field(description="Record position to start from (0-based); pass next_offset from the previous result.", ge=0)
+]
+Limit = Annotated[int | None, Field(description="Records to return (default: as many as fit the response size limit).", ge=1)]
 ConfirmDestructive = Annotated[
     bool | None, Field(description="Must be true, set only after the user approved this exact change.")
 ]
@@ -72,6 +76,28 @@ def write_guard(confirm: bool | None, action: str) -> str | dict | None:
             "with confirm_destructive_action: true only after they approve it.",
         }
     return None
+
+
+def local_page(rows: list, key: str, offset: int | None, limit: int | None, **extra: Any) -> dict:
+    """Page a list Meraki returned in full: ``rows[offset:offset+limit]`` plus paging fields.
+
+    next_offset continues right after the last record returned, also when the result is cut to
+    fit the size limit (these endpoints take no page size, so nothing else could continue it).
+    """
+    start = offset or 0
+    shown = rows[start:] if limit is None else rows[start : start + limit]
+    more = start + len(shown) < len(rows)
+    return compact(
+        {
+            **extra,
+            key: shown,
+            "count": len(shown),
+            "total": len(rows),
+            "offset": start,
+            "has_more": more,
+            "next_offset": start + len(shown) if more else None,
+        }
+    ) | {"_resume": {"key": "next_offset", "start": start}}
 
 
 def listing(page: Page, key: str) -> dict:

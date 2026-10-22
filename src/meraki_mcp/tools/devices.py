@@ -18,18 +18,29 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from ..api_client import MerakiClient
-from ._common import DESTRUCTIVE, READ_ONLY, ClientFactory, ConfirmDestructive, NetworkId, Serial, run_tool, write_guard
+from ._common import (
+    DESTRUCTIVE,
+    READ_ONLY,
+    ClientFactory,
+    ConfirmDestructive,
+    Limit,
+    NetworkId,
+    Offset,
+    Serial,
+    local_page,
+    run_tool,
+    write_guard,
+)
 
 
 def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
     @mcp.tool(annotations=READ_ONLY)
-    async def meraki_devices_list(network_id: NetworkId) -> str:
+    async def meraki_devices_list(network_id: NetworkId, offset: Offset = None, limit: Limit = None) -> str:
         """List a network's devices: serial, model, name, MAC, LAN IP, firmware, address, tags."""
 
         async def action(client: MerakiClient) -> dict:
             rows = await client.get(f"networks/{network_id}/devices")
-            rows = rows if isinstance(rows, list) else []
-            return {"devices": rows, "count": len(rows)}
+            return local_page(rows if isinstance(rows, list) else [], "devices", offset, limit)
 
         return await run_tool("meraki_devices_list", client_factory, action)
 

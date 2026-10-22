@@ -19,20 +19,32 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
 from ..api_client import MerakiClient
-from ._common import DESTRUCTIVE, READ_ONLY, ClientFactory, ConfirmDestructive, NetworkId, compact, run_tool, write_guard
+from ._common import (
+    DESTRUCTIVE,
+    READ_ONLY,
+    ClientFactory,
+    ConfirmDestructive,
+    Limit,
+    NetworkId,
+    Offset,
+    compact,
+    local_page,
+    run_tool,
+    write_guard,
+)
 
 _SECRET_FIELDS = ("psk", "radiusServers", "radiusAccountingServers")
 
 
 def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
     @mcp.tool(annotations=READ_ONLY)
-    async def meraki_wireless_ssids_list(network_id: NetworkId) -> str:
+    async def meraki_wireless_ssids_list(network_id: NetworkId, offset: Offset = None, limit: Limit = None) -> str:
         """List a network's SSIDs (0-14): name, enabled, auth / encryption, VLAN, band; pre-shared keys hidden."""
 
         async def action(client: MerakiClient) -> dict:
             rows = await client.get(f"networks/{network_id}/wireless/ssids")
             rows = [{k: ("********" if k == "psk" and v else v) for k, v in r.items()} if isinstance(r, dict) else r for r in (rows if isinstance(rows, list) else [])]
-            return {"network_id": network_id, "ssids": rows, "count": len(rows)}
+            return local_page(rows, "ssids", offset, limit, network_id=network_id)
 
         return await run_tool("meraki_wireless_ssids_list", client_factory, action)
 
@@ -64,12 +76,11 @@ def register(mcp: FastMCP, client_factory: ClientFactory) -> None:
         return await run_tool("meraki_wireless_ssids_update", client_factory, action)
 
     @mcp.tool(annotations=READ_ONLY)
-    async def meraki_wireless_rf_profiles_list(network_id: NetworkId) -> str:
+    async def meraki_wireless_rf_profiles_list(network_id: NetworkId, offset: Offset = None, limit: Limit = None) -> str:
         """List a network's RF profiles: band selection, channel width, power and minimum bitrate per band."""
 
         async def action(client: MerakiClient) -> dict:
             rows = await client.get(f"networks/{network_id}/wireless/rfProfiles")
-            rows = rows if isinstance(rows, list) else []
-            return {"network_id": network_id, "rf_profiles": rows, "count": len(rows)}
+            return local_page(rows if isinstance(rows, list) else [], "rf_profiles", offset, limit, network_id=network_id)
 
         return await run_tool("meraki_wireless_rf_profiles_list", client_factory, action)

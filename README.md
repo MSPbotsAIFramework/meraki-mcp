@@ -36,17 +36,23 @@ A request to `/mcp` without the key gets HTTP 401; a malformed organization id g
 ## Tools
 
 All tools return a JSON string. Paged lists take `per_page` (default 50, max 200; larger values are capped) and `starting_after`, and
-return `{count, has_more, next_cursor}`; pass `next_cursor` back as `starting_after`.
+return `{count, has_more, next_cursor}`; pass `next_cursor` back as `starting_after`. Lists Meraki returns in
+full (switch ports and port statuses, a network's devices, SSIDs and RF profiles, organizations) take
+`offset` and `limit` instead and return `{count, total, offset, has_more, next_offset}`: pass `next_offset`
+as `offset` to continue; when a result is cut to fit the size limit it starts right after the last record
+returned. A 404 on an organization-scoped call says that the organization may have API access disabled or
+the key no access to it. When a `meraki_raw_request` GET is cut, the note says how to page it with Meraki's
+own `perPage` / `startingAfter` query parameters.
 
 | Area | Tools |
 |---|---|
 | Overview | `meraki_navigate` (**domain**), `meraki_status` |
-| Organizations | `meraki_organizations_list`, `meraki_organizations_get` (**organization_id**), `meraki_organizations_inventory_list` (**organization_id**) |
+| Organizations | `meraki_organizations_list` (offset, limit, starting_after), `meraki_organizations_get` (**organization_id**), `meraki_organizations_inventory_list` (**organization_id**) |
 | Networks | `meraki_networks_list` (**organization_id**), `meraki_networks_get` (**network_id**), `meraki_networks_update` (**network_id**, name, timeZone, tags, notes) W, `meraki_networks_delete` (**network_id**) W |
-| Devices | `meraki_devices_list` (**network_id**), `meraki_devices_get` (**serial**), `meraki_devices_reboot` (**serial**) W, `meraki_devices_remove` (**network_id**, **serial**) W |
+| Devices | `meraki_devices_list` (**network_id**, offset, limit), `meraki_devices_get` (**serial**), `meraki_devices_reboot` (**serial**) W, `meraki_devices_remove` (**network_id**, **serial**) W |
 | Clients | `meraki_clients_list` (**network_id**, timespan), `meraki_clients_get` / `meraki_clients_get_policy` (**network_id**, **client_id**), `meraki_clients_update_policy` (**network_id**, **client_id**, **device_policy**, group_policy_id) W |
-| Switch | `meraki_switch_ports_list` (**serial**), `meraki_switch_port_statuses_list` (**serial**, timespan), `meraki_switch_ports_update` (**serial**, **port_id**, **settings**) W |
-| Wireless | `meraki_wireless_ssids_list` (**network_id**), `meraki_wireless_rf_profiles_list` (**network_id**), `meraki_wireless_ssids_update` (**network_id**, **number**, **settings**) W |
+| Switch | `meraki_switch_ports_list` (**serial**, offset, limit), `meraki_switch_port_statuses_list` (**serial**, timespan, offset, limit), `meraki_switch_ports_update` (**serial**, **port_id**, **settings**) W |
+| Wireless | `meraki_wireless_ssids_list` (**network_id**, offset, limit), `meraki_wireless_rf_profiles_list` (**network_id**, offset, limit), `meraki_wireless_ssids_update` (**network_id**, **number**, **settings**) W |
 | Appliance | `meraki_appliance_firewall_l3_get` (**network_id**), `meraki_appliance_firewall_l3_update` (**network_id**, **rules**) W, `meraki_appliance_vpn_status_get` (**network_id**) |
 | Any endpoint | `meraki_raw_request` (**method**, **path**, query, body); GET reads, POST / PUT / DELETE are W |
 
